@@ -131,6 +131,7 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
     colnames(Lag)[4:6]=c("<24 Hr","24-48 Hr", ">48 Hr")
     ##create overall powerpoint
     wb <- createWorkbook()
+    hs <- createStyle(fgFill="#4f81bd", halign="left", valign="top", textDecoration="bold", wrapText=TRUE)
     sheet1<- addWorksheet(wb, "Summary")
     writeDataTable(wb, sheet1, overall, firstColumn=TRUE, headerStyle=hs, bandedRows=TRUE) # write Completeness to table
     setColWidths(wb, sheet1, 1:ncol(overall), "auto") # format sheet
