@@ -17,17 +17,18 @@
 #' This defaults to 0, which will not generate these example workbooks.
 
 #' @export
-repeated_facility_table<-function(contact,username,password,start, end,directory,field=NA,exclude=NA,optional=T,email=F, sender,email_password){
-niter= nrow(contact)
-for (i in 1:niter){
-write_facility_report(username=username, password=password, 
-                      table="KS_PR_Processed", mft="KS_MFT", raw="KS_PR_Raw",
-                      start=start, 
-                      end=end,
-                      facility=contact$facility[i],
-                      directory="~",field=field,exclude=exclude,
-                      email =email, sender=sender,receiver=as.character(contact$receiver[i]),
-                      email_password=email_password)
+repeated_facility_table<-function(contact,table, mft, username,password,start, end,directory,field=NA,exclude=NA,optional=T,email=F, sender,email_password){
+  niter= nrow(contact)
+  for (i in 1:niter){
+    write_facility_report(username=username, password=password, 
+                          table=table, mft=mft, raw="KS_PR_Raw",
+                          start=start, 
+                          end=end,
+                          facility=contact$facility[i],
+                          directory="~",field=field,exclude=exclude,
+                          email =email, sender=sender,receiver=as.character(contact$receiver[i]),
+                          email_password=email_password)
+  }
+  
 }
 
-}
