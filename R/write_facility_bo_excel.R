@@ -1,3 +1,9 @@
+#' @description
+#' This function uses excel file as input to produce
+#' @import dplyr
+#' @import tidyr
+#' @import readxl
+
 write_facility_bo_excel <- function(input){
   Input <- read_excel(input, col_names = FALSE)
   
