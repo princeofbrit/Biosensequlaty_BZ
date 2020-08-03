@@ -32,5 +32,5 @@ write_facility_bo_excel <- function(input){
                         facility=facility,
                         directory=directory,field=field,exclude=exclude,
                         email =email, sender=sender,receiver=receiver,
-                        email_password=email_password,personname=presonname,title=title, phone=phone)
+                        email_password=email_password,personname=personname,title=title, phone=phone)
 }
