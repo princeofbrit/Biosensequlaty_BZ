@@ -28,7 +28,7 @@ success[i]=write_facility_report(username=username, password=password,
                       facility=contact$facility[i],
                       directory=directory,field=field,exclude=exclude,
                       email =email, sender=sender,receiver=as.character(contact$receiver[i]),
-                      email_password=email_password,personname=presonname,title=title, phone=phone)
+                      email_password=email_password,personname=personname,title=title, phone=phone)
 
   }
   return(cbind(contact,success))
