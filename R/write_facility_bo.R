@@ -110,13 +110,13 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
     filter(overall$Optional=='Required')
   }
   #select the field needed
-  if (is.character(field)==T){
+  if (is.na(field)==F){
     field1=paste(field,collapse="|")
     overall<-overall%>%
       filter(grepl(field1,overall$Field, ignore.case = T))
   }
   #exclude the select field
-  if (is.character(exclude)==T){
+  if (is.na(exclude)==F){
     exclude1=paste(exclude,collapse="|")
     overall<-overall%>%
       filter(!grepl(exclude1,overall$Field, ignore.case = T))
