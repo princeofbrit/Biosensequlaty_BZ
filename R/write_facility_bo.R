@@ -27,7 +27,7 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
   
   if (as.POSIXct(start)>as.POSIXct(end)){
     print("Error: Start time after end time")
-    emailed=FALSE
+    emailed='Start time after end time'
   } else {  
     start1=as.POSIXct(start)
     end1=as.POSIXct(end)
@@ -38,7 +38,7 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
       , as.is=TRUE)
     
     if (nrow(data) == 0) {
-      emailed=FALSE
+      emailed='query yielded no data'
       odbcCloseAll()
       print("The query yielded no data.")
       }
@@ -172,7 +172,7 @@ addStyle(wb, sheet1, cols=5, rows=(nrow+4), style = negStyle1)
  
     # write sheet
   saveWorkbook(wb, paste0(directory, "/", filename, "_Overall.xlsx"), overwrite=TRUE)
-  if (email==F){ emailed=FALSE}
+  if (email==F){ emailed='Reporter generated Email not supplied'}
   else if (email==T){
  #compose email message
   warningcount=which(!is.na(overall$Warning))
@@ -517,7 +517,7 @@ bodytext=paste(bodytext,"<p>&nbsp;</p>
                    reuse= F)
     
     smtp(emailor, verbose = TRUE)
-    emailed=TRUE
+    emailed='email sent'
    
   }
     }
