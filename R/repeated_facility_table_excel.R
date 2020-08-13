@@ -1,5 +1,19 @@
+#' Write NSSP BioSense Platform Data Quality Summary Reports for Multiple Facility, Use excel as input
+#'
 #' @description
-#' This function uses excel file as input to produce
+#' This performs `write_facilty_report`  function for all . It will generate summary report for all specified facility.
+#' This function uses excel generated information 
+#' The summary workbook shows percents and counts of nulls and invalids, Additionally it generates a timeliness
+#' report and creates a table. The program can send out a report to designated email address
+#' @param input location of input.xlsx file.
+#' @param contact A datatable of 2 colomns, facility is the facility number, receiver is the receive email address
+#' @return Report table stored at directory location. If email=TRUE, then a email will be sent. A table with facility, receiver and conformation of email being sent. 
+#' 
+#' @examples 
+#' library(emayili)
+#' library(ggplot2)
+#' library(readxl)
+#' repeated_facility_bo_excel("Input.xlsx", contact = contact)
 #' @import dplyr
 #' @import tidyr
 #' @import readxl
@@ -29,7 +43,7 @@ repeated_facility_bo_excel <- function(input, contact){
                         table=table, mft=mft,
                         start=start, 
                         end=end,
-                        directory=directory,field=field,exclude=exclude,
+                        directory=directory,exclude=exclude,
                         email =email, sender=sender,
                         email_password=email_password,personname=personname,title=title, phone=phone)
 }

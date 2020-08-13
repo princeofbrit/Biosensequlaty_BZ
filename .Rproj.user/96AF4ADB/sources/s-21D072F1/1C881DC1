@@ -1,0 +1,26 @@
+{
+    "id": "1C881DC1",
+    "path": "~/GitHub/Biosensequlaty-BO/man/repeated_facility_bo_excel.Rd",
+    "project_path": "man/repeated_facility_bo_excel.Rd",
+    "type": "r_doc",
+    "hash": "1637817757",
+    "contents": "",
+    "dirty": false,
+    "created": 1597355173095.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "cursorPosition": "25,15",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1597355177,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1597355177630,
+    "read_only": true,
+    "read_only_alternatives": [
+        "R/repeated_facility_table_excel.R"
+    ]
+}

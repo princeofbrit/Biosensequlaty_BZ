@@ -1,0 +1,23 @@
+{
+    "id": "1D84A87C",
+    "path": "~/GitHub/Biosensequlaty-BO/man/county_invalid.Rd",
+    "project_path": "man/county_invalid.Rd",
+    "type": "r_doc",
+    "hash": "102190160",
+    "contents": "",
+    "dirty": false,
+    "created": 1597355112271.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {},
+    "folds": "",
+    "lastKnownWriteTime": 1597336219,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1597336219,
+    "read_only": true,
+    "read_only_alternatives": [
+        "R/county_invalid.R"
+    ]
+}

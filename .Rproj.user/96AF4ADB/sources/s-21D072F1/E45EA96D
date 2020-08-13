@@ -1,0 +1,26 @@
+{
+    "id": "E45EA96D",
+    "path": "~/GitHub/Biosensequlaty-BO/man/write_facility_bo_excel.Rd",
+    "project_path": "man/write_facility_bo_excel.Rd",
+    "type": "r_doc",
+    "hash": "208829723",
+    "contents": "",
+    "dirty": false,
+    "created": 1597354868507.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "cursorPosition": "0,0",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1597355123,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1597355123133,
+    "read_only": true,
+    "read_only_alternatives": [
+        "R/write_facility_bo_excel.R"
+    ]
+}

@@ -4,7 +4,7 @@
 \alias{pull_data}
 \title{Pulling Data}
 \usage{
-pull_data(username, password, table, mft, start, end)
+pull_data(username, password, table, mft, raw, start, end)
 }
 \arguments{
 \item{username}{Your BioSense username, as a string. This is the same username you may use to log into RStudio or Adminer.}
