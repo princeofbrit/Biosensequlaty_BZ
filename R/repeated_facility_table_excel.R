@@ -17,7 +17,7 @@
 #' @import dplyr
 #' @import tidyr
 #' @import readxl
-
+#' @export
 repeated_facility_bo_excel <- function(input, contact){
   Input <- read_excel(input, col_names = FALSE)
   
