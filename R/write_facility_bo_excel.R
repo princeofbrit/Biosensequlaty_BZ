@@ -14,7 +14,7 @@
 #' @import dplyr
 #' @import tidyr
 #' @import readxl
-
+#' @export
 write_facility_bo_excel <- function(input){
   Input <- read_excel(input, col_names = FALSE)
   
