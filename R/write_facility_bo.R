@@ -98,489 +98,204 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
       emailed='query yielded no data'
       odbcCloseAll()
       print("The query yielded no data.")
-      }
+    }
     else{
-    name <- as.character(unlist(unname(c(sqlQuery(channel, paste0("SELECT Facility_Name FROM ", mft, " WHERE C_Biosense_Facility_ID = ", facility)))))) # get name from mft
-
-    odbcCloseAll() # close connection
-    
-    if (length(name)>1) {
-      name=name[1]
-    }
-    
-    field=unlist(strsplit(as.character(field), ';'))
-    exclude=unlist(strsplit(as.character(exclude), ';'))
-  # get hl7 values
-  data("hl7_values", envir=environment())
-  hl7_values$Field <- as.character(hl7_values$Field)
-  
-
-  # get facility-level state summary of required nulls
-  req_nulls <- get_req_nulls_BZ(data) %>%
-    select(-c(C_Biosense_Facility_ID)) %>%
-    gather(Field, Value, 2:ncol(.)) %>%
-    spread(Measure, Value) %>%
-    right_join(hl7_values, ., by = "Field")
-  # get facility-level state summary of optional nulls
-  opt_nulls <- get_opt_nulls_BZ(data) %>%
-    select(-c(C_Biosense_Facility_ID)) %>%
-    gather(Field, Value, 2:ncol(.)) %>%
-    spread(Measure, Value) %>%
-    right_join(hl7_values, ., by = "Field")
-  # get facility-level state summary of invalids
-  invalids <- get_all_invalids_BZ(data) %>%
-    select(-c(C_Biosense_Facility_ID)) %>%
-    gather(Field, Value, 2:ncol(.)) %>%
-    spread(Measure, Value) %>%
-    right_join(hl7_values, ., by = "Field")
-
-  # get overall complete by merging req_null and opt_null
-  overall_complete<- full_join(req_nulls,opt_nulls) %>%
-    mutate(Percent_Complete=100-Percent) %>%
-    select(-c(Count,Percent))
-  #create a table of overall complete% and overall valid
-  overall<-full_join(overall_complete,invalids) %>%
-    mutate(Percent_Valid=100-Percent) %>%
-    select(-c(Count,Percent)) 
-
-  nrow1=length(overall$Field)
-  #add warnings
-  for (i in 1:nrow1){
-    if(is.na(overall$Percent_Valid[i]) & is.na(overall$Percent_Complete[i])) {
-        overall$Warning[i]="Warning: Percent Complete and Percent Valid Missing"
-    } else if (is.na(overall$Percent_Complete[i])& overall$Percent_Valid[i]<90){
-      overall$Warning[i]="Warning: Percent Valid Under 90"
-    } else if (is.na(overall$Percent_Valid[i])& overall$Percent_Complete[i]<90){
-      overall$Warning[i]="Warning: Percent Complete Under 90"
-    }  else if(overall$Percent_Valid[i]<90 & overall$Percent_Complete[i]<90) {
-      overall$Warning[i]="Warning: Percent Complete and Percent Valid Under 90"
-    } else {
-      overall$Warning[i]=NA
-    }
-  }
-
-  #Declare optional field
-  overall$Optional=ifelse(overall$Field %in% opt_nulls$Field,"Optional", "Required" )
-  #Remove optional if optional=False
-  if (optional==F){
-  overall<-overall %>%
-    filter(overall$Optional=='Required')
-  }
-  #select the field needed
-  if (is.na(field)==F){
-    field1=paste(field,collapse="|")
-    overall<-overall%>%
-      filter(grepl(field1,overall$Field, ignore.case = T))
-  }
-  #exclude the select field
-  if (is.na(exclude)==F){
-    exclude1=paste(exclude,collapse="|")
-    overall<-overall%>%
-      filter(!grepl(exclude1,overall$Field, ignore.case = T))
-  }
-  nrow=length(overall$Field)
-  # getting first and last visit date times
-  vmin <- min(as.character(data$C_Visit_Date_Time))
-  vmax <- max(as.character(data$C_Visit_Date_Time))
-  amin <- min(as.character(data$Arrived_Date_Time))
-  amax <- max(as.character(data$Arrived_Date_Time))
-  Lag_Summary=lag_breakdown(data)
-  Lag<-data.frame(
-    Lag_Name=c("Arrival_Visit"),
-    Lag_Between=c("Arrival_Date_Time-Visit_Date_Time"),
-    Group1=t(Lag_Summary[1,3]),
-    Group2=t(Lag_Summary[2,3]),
-    Group3=t(Lag_Summary[3,3])
-  )
-  colnames(Lag)[3:5]=c("<24 Hr","24-48 Hr", ">48 Hr")
-
-  ##create overall powerpoint
-  wb <- createWorkbook()
-  hs <- createStyle(fgFill="#4f81bd", halign="left", valign="top", textDecoration="bold", wrapText=TRUE)
-  sheet1<- addWorksheet(wb, "Summary")
-  writeDataTable(wb, sheet1, overall, firstColumn=TRUE, headerStyle=hs, bandedRows=TRUE) # write Completeness to table
-  setColWidths(wb, sheet1, 1:ncol(overall), "auto") # format sheet
-  freezePane(wb, sheet1, firstActiveRow=2) # format sheet
-  writeDataTable(wb,sheet1,Lag,startCol=1,startRow=nrow+3, headerStyle=hs, colNames=TRUE,rowNames=FALSE,firstColumn=TRUE) #write Timeliness to table
-
-  ##colorcode sheet
-  negStyle <- createStyle(fontColour = "#000000", bgFill = "#FFC7CE")
-  posStyle <- createStyle(fontColour = "#000000", bgFill = "#C6EFCE")
-  negStyle1 <- createStyle(fontColour = "#000000", fgFill = "#FFC7CE")
-  posStyle1 <- createStyle(fontColour = "#000000", fgFill = "#C6EFCE")
-  midStyle <- createStyle(fontColour = "#000000", fgFill = "#FFFF00")
-  naStyle <- createStyle(bgFill = "#808080")
-
-    conditionalFormatting(wb, sheet1, cols=3, rows=2:(nrow+1), rule="$C2<90", style = negStyle)
-  conditionalFormatting(wb, sheet1, cols=3, rows=2:(nrow+1), rule="$C2>=90", style = posStyle) 
-  conditionalFormatting(wb, sheet1, cols=3, rows=2:(nrow+1), rule="ISBLANK($C2)=TRUE", style = naStyle)
-  conditionalFormatting(wb, sheet1, cols=4, rows=2:(nrow+1), rule="$D2<90", style = negStyle)
-  conditionalFormatting(wb, sheet1, cols=4, rows=2:(nrow+1), rule="$D2>=90", style = posStyle)
-conditionalFormatting(wb, sheet1, cols=4, rows=2:(nrow+1), rule="ISBLANK($D2)=TRUE", style = naStyle)
-addStyle(wb, sheet1, cols=3, rows=(nrow+4), style = posStyle1)
-addStyle(wb, sheet1, cols=4, rows=(nrow+4), style = midStyle)
-addStyle(wb, sheet1, cols=5, rows=(nrow+4), style = negStyle1)
-  ##Create Graph of change in delay over time
-  filename <- str_replace_all(name, "[^[a-zA-z\\s0-9]]", "") %>% # get rid of punctuation from faciltiy name
-    str_replace_all("[\\s]", "_") # replace spaces with underscores
-  ggsave(file=paste0( filename, "_WeeklyDelay.png"),lag_graph(data),dpi = 300,path = directory,width=6, height=4, unit ="in")
-  insertImage(wb, sheet1, paste0( directory, "/", filename, "_WeeklyDelay.png"), startRow = (nrow+6), startCol = 1, width = 6, height = 4)
-  
- 
-    # write sheet
-  saveWorkbook(wb, paste0(directory, "/", filename, "_Overall.xlsx"), overwrite=TRUE)
-  if (email==F){ emailed='Reporter generated Email not supplied'}
-  else if (email==T){
- #compose email message
-  warningcount=which(!is.na(overall$Warning))
-  nwarning= length(warningcount)
-  subject= paste(gsub('_',' ',filename),"Report")
- bodytext= paste("<p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>All,</p>
+      name <- as.character(unlist(unname(c(sqlQuery(channel, paste0("SELECT Facility_Name FROM ", mft, " WHERE C_Biosense_Facility_ID = ", facility)))))) # get name from mft
+      
+      odbcCloseAll() # close connection
+      
+      if (length(name)>1) {
+        name=name[1]
+      }
+      
+      field=unlist(strsplit(as.character(field), ';'))
+      exclude=unlist(strsplit(as.character(exclude), ';'))
+      # get hl7 values
+      data("hl7_values", envir=environment())
+      hl7_values$Field <- as.character(hl7_values$Field)
+      
+      
+      # get facility-level state summary of required nulls
+      req_nulls <- get_req_nulls_BZ(data) %>%
+        select(-c(C_Biosense_Facility_ID)) %>%
+        gather(Field, Value, 2:ncol(.)) %>%
+        spread(Measure, Value) %>%
+        right_join(hl7_values, ., by = "Field")
+      # get facility-level state summary of optional nulls
+      opt_nulls <- get_opt_nulls_BZ(data) %>%
+        select(-c(C_Biosense_Facility_ID)) %>%
+        gather(Field, Value, 2:ncol(.)) %>%
+        spread(Measure, Value) %>%
+        right_join(hl7_values, ., by = "Field")
+      # get facility-level state summary of invalids
+      invalids <- get_all_invalids_BZ(data) %>%
+        select(-c(C_Biosense_Facility_ID)) %>%
+        gather(Field, Value, 2:ncol(.)) %>%
+        spread(Measure, Value) %>%
+        right_join(hl7_values, ., by = "Field")
+      
+      # get overall complete by merging req_null and opt_null
+      overall_complete<- full_join(req_nulls,opt_nulls) %>%
+        mutate(Percent_Complete=100-Percent) %>%
+        select(-c(Count,Percent))
+      #create a table of overall complete% and overall valid
+      overall<-full_join(overall_complete,invalids) %>%
+        mutate(Percent_Valid=100-Percent) %>%
+        select(-c(Count,Percent)) 
+      
+      nrow1=length(overall$Field)
+      #add warnings
+      for (i in 1:nrow1){
+        if(is.na(overall$Percent_Valid[i]) & is.na(overall$Percent_Complete[i])) {
+          overall$Warning[i]="Warning: Percent Complete and Percent Valid Missing"
+        } else if (is.na(overall$Percent_Complete[i])& overall$Percent_Valid[i]<90){
+          overall$Warning[i]="Warning: Percent Valid Under 90"
+        } else if (is.na(overall$Percent_Valid[i])& overall$Percent_Complete[i]<90){
+          overall$Warning[i]="Warning: Percent Complete Under 90"
+        }  else if(overall$Percent_Valid[i]<90 & overall$Percent_Complete[i]<90) {
+          overall$Warning[i]="Warning: Percent Complete and Percent Valid Under 90"
+        } else {
+          overall$Warning[i]=NA
+        }
+      }
+      
+      #Declare optional field
+      overall$Optional=ifelse(overall$Field %in% opt_nulls$Field,"Optional", "Required" )
+      #Remove optional if optional=False
+      if (optional==F){
+        overall<-overall %>%
+          filter(overall$Optional=='Required')
+      }
+      #select the field needed
+      if (is.na(field)==F){
+        field1=paste(field,collapse="|")
+        overall<-overall%>%
+          filter(grepl(field1,overall$Field, ignore.case = T))
+      }
+      #exclude the select field
+      if (is.na(exclude)==F){
+        exclude1=paste(exclude,collapse="|")
+        overall<-overall%>%
+          filter(!grepl(exclude1,overall$Field, ignore.case = T))
+      }
+      nrow=length(overall$Field)
+      # getting first and last visit date times
+      vmin <- min(as.character(data$C_Visit_Date_Time))
+      vmax <- max(as.character(data$C_Visit_Date_Time))
+      amin <- min(as.character(data$Arrived_Date_Time))
+      amax <- max(as.character(data$Arrived_Date_Time))
+      Lag_Summary=lag_breakdown(data)
+      Lag<-data.frame(
+        Lag_Name=c("Arrival_Visit"),
+        Lag_Between=c("Arrival_Date_Time-Visit_Date_Time"),
+        Group1=t(Lag_Summary[1,3]),
+        Group2=t(Lag_Summary[2,3]),
+        Group3=t(Lag_Summary[3,3])
+      )
+      colnames(Lag)[3:5]=c("<24 Hr","24-48 Hr", ">48 Hr")
+      
+      ##create overall powerpoint
+      wb <- createWorkbook()
+      hs <- createStyle(fgFill="#4f81bd", halign="left", valign="top", textDecoration="bold", wrapText=TRUE)
+      sheet1<- addWorksheet(wb, "Summary")
+      writeDataTable(wb, sheet1, overall, firstColumn=TRUE, headerStyle=hs, bandedRows=TRUE) # write Completeness to table
+      setColWidths(wb, sheet1, 1:ncol(overall), "auto") # format sheet
+      freezePane(wb, sheet1, firstActiveRow=2) # format sheet
+      writeDataTable(wb,sheet1,Lag,startCol=1,startRow=nrow+3, headerStyle=hs, colNames=TRUE,rowNames=FALSE,firstColumn=TRUE) #write Timeliness to table
+      
+      ##colorcode sheet
+      negStyle <- createStyle(fontColour = "#000000", bgFill = "#FFC7CE")
+      posStyle <- createStyle(fontColour = "#000000", bgFill = "#C6EFCE")
+      negStyle1 <- createStyle(fontColour = "#000000", fgFill = "#FFC7CE")
+      posStyle1 <- createStyle(fontColour = "#000000", fgFill = "#C6EFCE")
+      midStyle <- createStyle(fontColour = "#000000", fgFill = "#FFFF00")
+      naStyle <- createStyle(bgFill = "#808080")
+      
+      conditionalFormatting(wb, sheet1, cols=3, rows=2:(nrow+1), rule="$C2<90", style = negStyle)
+      conditionalFormatting(wb, sheet1, cols=3, rows=2:(nrow+1), rule="$C2>=90", style = posStyle) 
+      conditionalFormatting(wb, sheet1, cols=3, rows=2:(nrow+1), rule="ISBLANK($C2)=TRUE", style = naStyle)
+      conditionalFormatting(wb, sheet1, cols=4, rows=2:(nrow+1), rule="$D2<90", style = negStyle)
+      conditionalFormatting(wb, sheet1, cols=4, rows=2:(nrow+1), rule="$D2>=90", style = posStyle)
+      conditionalFormatting(wb, sheet1, cols=4, rows=2:(nrow+1), rule="ISBLANK($D2)=TRUE", style = naStyle)
+      addStyle(wb, sheet1, cols=3, rows=(nrow+4), style = posStyle1)
+      addStyle(wb, sheet1, cols=4, rows=(nrow+4), style = midStyle)
+      addStyle(wb, sheet1, cols=5, rows=(nrow+4), style = negStyle1)
+      ##Create Graph of change in delay over time
+      filename <- str_replace_all(name, "[^[a-zA-z\\s0-9]]", "") %>% # get rid of punctuation from faciltiy name
+        str_replace_all("[\\s]", "_") # replace spaces with underscores
+      ggsave(file=paste0( filename, "_WeeklyDelay.png"),lag_graph(data),dpi = 300,path = directory,width=6, height=4, unit ="in")
+      insertImage(wb, sheet1, paste0( directory, "/", filename, "_WeeklyDelay.png"), startRow = (nrow+6), startCol = 1, width = 6, height = 4)
+      
+      
+      # write sheet
+      saveWorkbook(wb, paste0(directory, "/", filename, "_Overall.xlsx"), overwrite=TRUE)
+      if (email==F){ emailed='Reporter generated Email not supplied'}
+      else if (email==T){
+        #compose email message
+        warningcount=which(!is.na(overall$Warning))
+        nwarning= length(warningcount)
+        subject= paste(gsub('_',' ',filename),"Report")
+        bodytext= paste("<p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>All,</p>
 <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>&nbsp;</p>
-<p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>Attached is the data quality report I ran for ",gsub('_',' ',filename),". I have summarized some of the issues I noticed with the data from" , start, " to", end,". Below you will find an explaination of the fields in the report. Please don&rsquo;t hesitate to contact me with any questions.</p>
+<p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'> Greetings, this is a data quality summary for your hospital's submission from" , start, " to", end,"from the Kansas Syndromic Surveillance Program at the Kansas Department of Health and Environment.  We provide the attached report as a way letting you know about the completeness, validity and timeliness of your emergency department data submitted to our program.  There may be many reasons why the data sent to us failed the Centers for Disease Control and Prevention 90 percent standard. We would be happy to work with you if you have questions about the report or why your data may not meet standards. If the attached report does not have any red highlights for lower quality, then you don't need to take any further action.  We appreciate your attention to data quality.  For more information on the fields we received from your Electronic Health Records system, please visit this link:. We know you may have concerns about authenticity of this message. To verify this is authentic, you may call me,",name,", ",title,", ", phone, "or my supervisor, Greg Crawford, 785-296-1531.  Please ask us any questions.  Our KSSP web page is <a data-auth='NotApplicable' href='mailto:kdhesys@kdheks.gov' rel='noopener noreferrer' style='margin: 0px; padding: 0px; border: 0px; font: inherit; vertical-align: baseline;' target='_blank'><span style='margin: 0px; padding: 0px; border: 0px; font: inherit; vertical-align: baseline; color: blue;'>kdhe.syndromic@ks.gov</span></a></p>
 <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><strong><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 14pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'>&nbsp;</span></strong></p>")
-  if (inline==T){
-  if (nwarning==0){
-    bodytext=paste(bodytext,"
+        if (inline==T){
+          if (nwarning==0){
+            bodytext=paste(bodytext,"
                    <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>All the fields are complete and valid, keep up the good work!</p>")
-  } else {
-    
-    for (j in 1:nwarning){
-      if(overall$Warning[warningcount[j]]=="Warning: Percent Complete Under 90"){
-        bodytext=paste(bodytext,"
+          } else {
+            
+            for (j in 1:nwarning){
+              if(overall$Warning[warningcount[j]]=="Warning: Percent Complete Under 90"){
+                bodytext=paste(bodytext,"
                        <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>", overall$Percent_Complete[warningcount[j]],"% of", overall$Field[warningcount[j]],"is complete. The HL7 code is",overall$HL7[warningcount[j]] ,"</p>")
-      }
-      if(overall$Warning[warningcount[j]]=="Warning: Percent Valid Under 90"){
-        bodytext=paste(bodytext,"
+              }
+              if(overall$Warning[warningcount[j]]=="Warning: Percent Valid Under 90"){
+                bodytext=paste(bodytext,"
                        <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>", overall$Percent_Valid[warningcount[j]],"% of", overall$Field[warningcount[j]],"is valid. The HL7 code is",overall$HL7[warningcount[j]] ,"</p>")
-      }
-      if(overall$Warning[warningcount[j]]=="Warning: Percent Complete and Percent Valid Under 90"){
-        bodytext=paste(bodytext,"
+              }
+              if(overall$Warning[warningcount[j]]=="Warning: Percent Complete and Percent Valid Under 90"){
+                bodytext=paste(bodytext,"
                        <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>", overall$Percent_Complete[warningcount[j]],"% of", overall$Field[warningcount[j]],"is complete.", overall$Percent_Valid[warningcount[j]],"% of", overall$Field[warningcount[j]],"is valid. The HL7 code is",overall$HL7[warningcount[j]] ,"</p>")
-      }
-      if(overall$Warning[warningcount[j]]=="Warning: Percent Complete and Percent Valid Missing"){
-        bodytext=paste(bodytext,"
+              }
+              if(overall$Warning[warningcount[j]]=="Warning: Percent Complete and Percent Valid Missing"){
+                bodytext=paste(bodytext,"
                        <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>", overall$Field[warningcount[j]],"has missing % Complete and % Valid. The HL7 code is",overall$HL7[warningcount[j]] ,"</p>")
-      }
-    }
-    }
-  }
-
-bodytext=paste(bodytext,"<p>&nbsp;</p>
-<table style='border: none;border-collapse: collapse;width:677pt;'>
-    <tbody>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:700;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:bottom;border:none;height:15.0pt;width:291pt;'>Field</td>
-            <td style='color:black;font-size:15px;font-weight:700;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:bottom;border:none;width:386pt;'>Description</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Administrative_Sex</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Sex of patient; (M)ale, (F)emale, (U)nknown, or (N)ot Reported</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Admit_Reason_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Provider&#39;s reason for admitting the patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Age_Reported</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Age of patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Age_Units_Reported</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Age units (years, month, or days)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Birth_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patients date of birth (DOB)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Chief_Complaint_Text</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&#39;s reason for ER visit (i.e. SOB, chest pain, fever, cough, nausea, etc.)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Diagnosis_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Medical coding of ER diagnosis for classification</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Diagnosis_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Description for medical coding used for the ER diagnosis</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:30.0pt;'>Diagnosis_Type</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>A code that identifies the type of diagnosis beng sent, (A)dmitting; (F)inal; (W)orking</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Discharge_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Date and time patient was discharged</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:30.0pt;'>Discharge_Disposition</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&rsquo;s anticipated location or status following ED visit (i.e., discharged to home, inpatient, expired, etc.)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Ethnicity_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Code representing ethnicity of patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Ethnicity_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Ethnicity of patient, Hispanic/Latino or Non-Hispanic/Non-Latino</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Facility_Type_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Code representing type of facility</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:30.0pt;'>Facility_Type_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Facility type; Emergency Care, Primary Care, Urgent Care, Inpatient, or Medical Specialty</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>First_Patient_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unique patient identifier entered by the hospital</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Height</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Height of the patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Height_Units</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unit of measure as it pertians to the height; centimeter, inch, foot, or meter</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Insurance_Company_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&#39;s insurance company&#39;s identifier code</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Medical_Record_Number</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unique identifier for patient across all visits to facility</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Message_Control_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>A number or other identifier that uniquely identifies the message</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Message_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Date and time that the message is sent, including time zone</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Message_Profile_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Reference to a message profile</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Patient_City</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>City/town of patient residence</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:30.0pt;'>Patient_Class_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient classification within a facility; (D)irect Admit, (E)mergency, (I)npatient, (V) Observation, (B) Obstretrics, (O)utpatient, (P)readmit, or (R)ecurring Patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Patient_Country</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Country of patient&#39;s residence</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Patient_State</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>State of patient residence</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Patient_Zip</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Zip code of patient residence</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Processing_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Defines message; Production, Training, or Debugging System</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Race_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Identifier representing patient&#39;s race</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:45.0pt;'>Race_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Description of patient&#39;s race; White, American Indian or Alaska Native, Asian, Black or African American, Native Hawaiian or Other Pacific Islander, or Other Race</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Recorded_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Date and time of each record associated to the patient&#39;s ER visit</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Smoking_Status_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&#39;s smoking status identifier</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Smoking_Status_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&#39;s smoking status description</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Treating_Facility_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>NSSP assigned/registered identification number</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:30.0pt;'>Trigger_Event</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Event (i.e. record change/update) that triggers a message submission / why the message was created</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Version_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Used to interpret format and content of message</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Visit_ID</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unique identifier for patient visit</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Weight</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Wieght of the patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Weight_Units</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unit of measure as it pertians to the weight; gram, kilogram, ounce, or pound</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>C_Patient_County</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>County of patient&#39;s residence</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Admit_Source</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Indicates where the patient was admitted</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Clinical_Impression</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Clinical impression of diagnosis (free text)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Initial_Pulse_Oximetry</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>First recorded pulse oximetry</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Initial_Pulse_Oximetry_Units</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unit of measure as it pertains to pulse oximetry, percent (%)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Initial_Temp</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>First recorded body temperature of patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Initial_Temp_Units</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unit of measure pertaining to the Initial Temp; Fahrenheit or Celsius</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Medication_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Code identifier for prescribed or dispensed medications</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Medication_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Description of prescribed or despensed medications</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Medication_List</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patients current medication list</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Problem_List_Code</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Code(s) representing patient&#39;s condition(s)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Problem_List_Description</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Description of each listed problem that has been coded</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Systolic_Diastolic_Blood_Pressure</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>First recorded blood pressure of patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Systolic_Diastolic_Blood_Pressure_Units</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Unit of measure as it pertains to blood pressure; millimeters of mercury (mm)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Travel_History</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient travel history</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Triage_Notes</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Notes pertaining to the triage of the patient</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Admit_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Date and time of patient admission</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Patient_County</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>County of patient&#39;s residence</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Death_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&#39;s date and time of death&nbsp;</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Diagnosis_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Date and time of patient&#39;s diagnosis by provider</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Observation_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'><br></td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Procedure_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Date and time that the procedure was performed</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>C_Visit_Date_Time</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&#39;s date of visit (system calculated)</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Chief_Complaint_Text_Short</td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Short description of reason patient is seeking care</td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'><br></td>
-            <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'><br></td>
-        </tr>
-        <tr>
-            <td style='color:black;font-size:15px;font-weight:700;font-style:normal;text-decoration:none;font-family:Calibri;text-align:left;vertical-align:middle;border:none;background:#4F81BD;height:15.0pt;'>Elements used for Timeliness calculations</td>
-                 <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'><br></td>
-                 </tr>
-                 <tr>
-                 <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Arrival_Date_Time</td>
-                 <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Date and time of encounter for admission</td>
-                 </tr>
-                 <tr>
-                 <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;height:15.0pt;'>Visit_Date_Time</td>
-                 <td style='color:black;font-size:15px;font-weight:400;font-style:normal;text-decoration:none;font-family:Calibri, sans-serif;text-align:general;vertical-align:middle;border:none;width:386pt;'>Patient&#39;s date of visit</td>
-                 </tr>
-                 </tbody>
-                 </table>
-<p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><strong><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 14pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'>&nbsp;</span></strong></p>
-<p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><strong><em><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 14pt; line-height: inherit; font-family: 'Albany AMT'; vertical-align: baseline; color: inherit;'>",personname,"</span></em></strong></p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>",phone,"</p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'>",title,"</p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 10pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'><a data-auth='NotApplicable' href='mailto:jejones@kdheks.gov' rel='noopener noreferrer' style='margin: 0px; padding: 0px; border: 0px; font: inherit; vertical-align: baseline;' target='_blank'><span style='margin: 0px; padding: 0px; border: 0px; font: inherit; vertical-align: baseline; color: blue;'>", sender, "</span></a></span></p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 10pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'><a data-auth='NotApplicable' href='mailto:kdhesys@kdheks.gov' rel='noopener noreferrer' style='margin: 0px; padding: 0px; border: 0px; font: inherit; vertical-align: baseline;' target='_blank'><span style='margin: 0px; padding: 0px; border: 0px; font: inherit; vertical-align: baseline; color: blue;'>kdhe.syndromic@ks.gov</span></a></span></p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 10pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'>KDHE-DPH-BEPHI-PHI-VSDA</span></p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 10pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'>1000 S Jackson Street, STE 130</span></p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 10pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'>Topeka, KS &nbsp;66612</span></p>
-         <p style='color: rgb(50, 49, 48); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px;'><span style='margin: 0px; padding: 0px; border: 0px; font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; font-size: 10pt; line-height: inherit; font-family: inherit; vertical-align: baseline; color: inherit;'>Kansas Meaningful Use</span></p>
+              }
+            }
+          }
+        }
+        
+        bodytext=paste(bodytext,"<p>&nbsp;</p>
+<p style= 'color: rgb(32, 31, 30); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px 0px 0px 72pt;'>Kansas Syndromic Surveillance Program</p>
+                 <p style='color: rgb(32, 31, 30); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px 0px 0px 72pt;'>",personname,", ", title, "</p>
+                 <p style='color: rgb(32, 31, 30); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px 0px 0px 72pt;'>Bureau of Epidemiology and Public Health Informatics</p>
+                 <p style='color: rgb(32, 31, 30); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px 0px 0px 72pt;'>Kansas Department of Health and Environment</p>
 ")
-    receiver=unlist(strsplit(as.character(receiver), ';'))
-    
-    emailor <- envelope() %>%
-      from(sender) %>%
-      to(receiver) %>%
-      cc("kdhe.syndromic@ks.gov") %>%
-      subject(subject) %>%
-      html(bodytext) %>%
-      attachment(path=paste0(directory, "/", filename, "_Overall.xlsx"))
-    
-    smtp <- server(host = "smtp.office365.com",
-                   port = 587,
-                   username = sender,
-                   password = email_password,
-                   reuse= F)
-    
-    smtp(emailor, verbose = TRUE)
-    emailed='email sent'
-   
-  }
+        receiver=unlist(strsplit(as.character(receiver), ';'))
+        
+        emailor <- envelope() %>%
+          from(sender) %>%
+          to(receiver) %>%
+          cc("kdhe.syndromic@ks.gov") %>%
+          subject(subject) %>%
+          html(bodytext) %>%
+          attachment(path=paste0(directory, "/", filename, "_Overall.xlsx"))
+        
+        smtp <- server(host = "smtp.office365.com",
+                       port = 587,
+                       username = sender,
+                       password = email_password,
+                       reuse= F)
+        
+        smtp(emailor, verbose = TRUE)
+        emailed='email sent'
+        
+      }
     }
   }
   return(emailed)
   
 }
+
 
