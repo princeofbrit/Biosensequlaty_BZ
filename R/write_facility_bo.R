@@ -223,8 +223,8 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
       ##Create Graph of change in delay over time
       filename <- str_replace_all(name, "[^[a-zA-z\\s0-9]]", "") %>% # get rid of punctuation from faciltiy name
         str_replace_all("[\\s]", "_") # replace spaces with underscores
-      ggsave(file=paste0( filename, "_WeeklyDelay.png"),lag_graph(data),dpi = 300,path = directory,width=8, height=8, unit ="in")
-      insertImage(wb, sheet1, paste0( directory, "/", filename, "_WeeklyDelay.png"), startRow = (nrow+6), startCol = 1, width = 6, height = 4)
+      ggsave(file=paste0( filename, "_WeeklyDelay.png"),lag_graph(data),dpi = 300,path = directory,width=8, height=6, unit ="in")
+      insertImage(wb, sheet1, paste0( directory, "/", filename, "_WeeklyDelay.png"), startRow = (nrow+6), startCol = 1, width = 8, height = 6)
       
       
       # write sheet
