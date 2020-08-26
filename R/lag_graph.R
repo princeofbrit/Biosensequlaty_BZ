@@ -17,7 +17,7 @@ lag_graph<-function(data){
   
 
  Graph1=ggplot(data=Graph_data, aes(x=as.Date(week), y=Arrival_Visit,group = 1, color = "Weekly Average Hour Delayed")) + geom_point()+geom_line()+theme_classic()+xlab("Week")+geom_hline( linetype="dashed", aes(yintercept=24,color = "24-hours (Recommended)"))+
-   scale_colour_manual(values = c("red", "black"))+ylab('Average Hour Delayed') ggtitle("Weekly Average Hour Delayed ")+expand_limits(y=0)
+   scale_colour_manual(values = c("red", "black"))+ylab('Average Hour Delayed')+ggtitle("Weekly Average Hour Delayed (Time between arrival and first visit report)")+expand_limits(y=0)
  return(Graph1)
   
   
