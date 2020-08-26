@@ -16,8 +16,8 @@ lag_graph<-function(data){
   Graph_data=Time_Diff %>%group_by(week = cut(Visit,'week')) %>% summarise(Arrival_Visit=mean(lag_Arrival_Visit))
   
 
- Graph1=ggplot(data=Graph_data, aes(x=as.Date(week), y=Arrival_Visit,group = 1, color = "Weekly Mean Delay")) + geom_point()+geom_line()+theme_classic()+xlab("Week")+geom_hline( linetype="dashed", aes(yintercept=24,color = "24-hours (Recommended)"))+
-   scale_colour_manual(values = c("red", "black"))+ ggtitle("Weekly Mean Lag")
+ Graph1=ggplot(data=Graph_data, aes(x=as.Date(week), y=Arrival_Visit,group = 1, color = "Weekly Average Hour Delayed")) + geom_point()+geom_line()+theme_classic()+xlab("Week")+geom_hline( linetype="dashed", aes(yintercept=24,color = "24-hours (Recommended)"))+
+   scale_colour_manual(values = c("red", "black"))+ylab('Average Hour Delayed') ggtitle("Weekly Average Hour Delayed ")+expand_limits(y=0)
  return(Graph1)
   
   

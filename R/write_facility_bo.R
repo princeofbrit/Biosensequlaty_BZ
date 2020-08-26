@@ -192,7 +192,7 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
         Group2=t(Lag_Summary[2,3]),
         Group3=t(Lag_Summary[3,3])
       )
-      colnames(Lag)[3:5]=c("<24 Hr","24-48 Hr", ">48 Hr")
+      colnames(Lag)[3:5]=c("% Visit Received in <24 Hr","% Visit Received in 24-48 Hr", "% Visit Received in >48 Hr")
       
       ##create overall powerpoint
       wb <- createWorkbook()
