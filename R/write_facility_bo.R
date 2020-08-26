@@ -108,8 +108,8 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
         name=name[1]
       }
       
-      field=unlist(strsplit(as.character(field), ';'))
-      exclude=unlist(strsplit(as.character(exclude), ';'))
+      field=unlist(strsplit(as.character(field), ';|,'))
+      exclude=unlist(strsplit(as.character(exclude), ';|,'))
       # get hl7 values
       data("hl7_values", envir=environment())
       hl7_values$Field <- as.character(hl7_values$Field)
@@ -272,7 +272,7 @@ write_facility_report <- function(username, password, table, mft, start, end, fa
                  <p style='color: rgb(32, 31, 30); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px 0px 0px 0pt;'>Bureau of Epidemiology and Public Health Informatics</p>
                  <p style='color: rgb(32, 31, 30); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; font-size: 11pt; font-family: Calibri, sans-serif; margin: 0px 0px 0px 0pt;'>Kansas Department of Health and Environment</p>
 ")
-        receiver=unlist(strsplit(as.character(receiver), ';'))
+        receiver=unlist(strsplit(as.character(receiver), ';|,'))
         
         emailor <- envelope() %>%
           from(sender) %>%
